@@ -30,11 +30,17 @@ public class Application {
 
     public static final String TEMPERATURE_STATS_MAP_NAME = "temp_stats";
 
-    public static final String TEMPERATURE_STATS_AVERAGE_MAP_KEY = "avg";
+    public static final String TEMP_STREAM_STATS_AVERAGE_MAP_KEY = "temp_stream_avg";
 
-    public static final String TEMPERATURE_STATS_MIN_MAP_KEY = "min";
+    public static final String TEMP_STREAM_STATS_MIN_MAP_KEY = "temp_stream_min";
 
-    public static final String TEMPERATURE_STATS_MAX_MAP_KEY = "max";
+    public static final String TEMP_STREAM_STATS_MAX_MAP_KEY = "temp_stream_max";
+
+    public static final String TEMP_MAP_STATS_AVERAGE_MAP_KEY = "temp_map_avg";
+
+    public static final String TEMP_MAP_STATS_MIN_MAP_KEY = "temp_map_min";
+
+    public static final String TEMP_MAP_STATS_MAX_MAP_KEY = "temp_map_max";
 
     public static final String AVG_TEMPERATURE_JOB_NAME = "average-temp";
 
@@ -54,14 +60,23 @@ public class Application {
         IMap<String, Double> tempStatsMap = hzClient.getMap(TEMPERATURE_STATS_MAP_NAME);
 
         tempStatsMap.addEntryListener((EntryUpdatedListener<String, Double>) event -> {
-            if (event.getKey().equalsIgnoreCase(TEMPERATURE_STATS_AVERAGE_MAP_KEY)) {
-                System.out.println("AVG temperature: " + event.getValue());
+            if (event.getKey().equalsIgnoreCase(TEMP_STREAM_STATS_AVERAGE_MAP_KEY)) {
+                System.out.println("AVG stream temperature: " + event.getValue());
             }
-            if (event.getKey().equalsIgnoreCase(TEMPERATURE_STATS_MIN_MAP_KEY)) {
-                System.out.println("MIN temperature: " + event.getValue());
+            if (event.getKey().equalsIgnoreCase(TEMP_STREAM_STATS_MIN_MAP_KEY)) {
+                System.out.println("MIN stream temperature: " + event.getValue());
             }
-            if (event.getKey().equalsIgnoreCase(TEMPERATURE_STATS_MAX_MAP_KEY)) {
-                System.out.println("MAX temperature: " + event.getValue());
+            if (event.getKey().equalsIgnoreCase(TEMP_STREAM_STATS_MAX_MAP_KEY)) {
+                System.out.println("MAX stream temperature: " + event.getValue());
+            }
+            if (event.getKey().equalsIgnoreCase(TEMP_MAP_STATS_AVERAGE_MAP_KEY)) {
+                System.out.println("AVG map temperature: " + event.getValue());
+            }
+            if (event.getKey().equalsIgnoreCase(TEMP_MAP_STATS_MIN_MAP_KEY)) {
+                System.out.println("MIN map temperature: " + event.getValue());
+            }
+            if (event.getKey().equalsIgnoreCase(TEMP_MAP_STATS_MAX_MAP_KEY)) {
+                System.out.println("MAX map temperature: " + event.getValue());
             }
         }, true);
 
@@ -70,30 +85,30 @@ public class Application {
         hiveMQ.start().join();
 
         // TODO: implement prediction/training pipelines
-        initStatsPipelines(hzClient, temperaturesMap, tempStatsMap);
-        startMqttIngestionPipeline(hzClient, temperaturesMap);
+        initMapStatsPipelines(hzClient, temperaturesMap, tempStatsMap);
+        startMqttIngestionPipeline(hzClient, temperaturesMap, tempStatsMap);
     }
 
-    private static void initStatsPipelines(HazelcastInstance hzClient, IMap<Long, Double> temperatureMap, IMap<String, Double> tempStatsMap) {
+    private static void initMapStatsPipelines(HazelcastInstance hzClient, IMap<Long, Double> temperatureMap, IMap<String, Double> tempStatsMap) {
         // average temperature pipeline
         Pipeline avgTempPipeline = Pipeline.create();
         avgTempPipeline.readFrom(Sources.map(temperatureMap))
                 .aggregate(AggregateOperations.averagingDouble(Map.Entry::getValue))
-                .map(value -> new AbstractMap.SimpleEntry<>(TEMPERATURE_STATS_AVERAGE_MAP_KEY, value))
+                .map(value -> new AbstractMap.SimpleEntry<>(TEMP_MAP_STATS_AVERAGE_MAP_KEY, value))
                 .writeTo(Sinks.map(tempStatsMap));
 
         // min temperature pipeline
         Pipeline minTempPipeline = Pipeline.create();
         minTempPipeline.readFrom(Sources.map(temperatureMap))
                 .aggregate(AggregateOperations.minBy((o1, o2) -> o1.getValue().compareTo(o2.getValue())))
-                .map(value -> new AbstractMap.SimpleEntry<>(TEMPERATURE_STATS_MIN_MAP_KEY, value.getValue()))
+                .map(value -> new AbstractMap.SimpleEntry<>(TEMP_MAP_STATS_MIN_MAP_KEY, value.getValue()))
                 .writeTo(Sinks.map(tempStatsMap));
 
         // max temperature pipeline
         Pipeline maxTempPipeline = Pipeline.create();
         maxTempPipeline.readFrom(Sources.map(temperatureMap))
                 .aggregate(AggregateOperations.maxBy((o1, o2) -> o1.getValue().compareTo(o2.getValue())))
-                .map(value -> new AbstractMap.SimpleEntry<>(TEMPERATURE_STATS_MAX_MAP_KEY, value.getValue()))
+                .map(value -> new AbstractMap.SimpleEntry<>(TEMP_MAP_STATS_MAX_MAP_KEY, value.getValue()))
                 .writeTo(Sinks.map(tempStatsMap));
 
         temperatureMap.addEntryListener((EntryAddedListener<Long, Double>) event -> {
@@ -103,7 +118,8 @@ public class Application {
         }, true);
     }
 
-    private static void startMqttIngestionPipeline(HazelcastInstance hzClient, IMap<Long, Double> temperatureMap) {
+    private static void startMqttIngestionPipeline(HazelcastInstance hzClient, IMap<Long, Double> temperatureMap,
+        IMap<String, Double> temperatureStatsMap) {
         StreamSource<String> tempSource = MqttSources.builder()
             .clientId("jet-consumer")
             .broker("tcp://127.0.0.1:1883")
@@ -116,16 +132,29 @@ public class Application {
 
         // MQTT processing pipeline
         Pipeline mqttIngestionPipeline = Pipeline.create();
-        mqttIngestionPipeline.readFrom(tempSource)
+        StreamStage<Double> streamStage = mqttIngestionPipeline.readFrom(tempSource)
             .withoutTimestamps()
             .filter(NumberUtils::isCreatable)
             .map(Double::parseDouble)
             .peek()
-            .setLocalParallelism(1)
-            .writeTo(Sinks.mapWithUpdating(
+            .setLocalParallelism(4);
+
+        streamStage.writeTo(Sinks.mapWithUpdating(
                 temperatureMap,
                 aDouble -> System.currentTimeMillis(),
                 (oldValue, newValue) -> newValue));
+
+        streamStage.rollingAggregate(AggregateOperations.averagingDouble(value -> value))
+            .map(value -> new AbstractMap.SimpleEntry<>(TEMP_STREAM_STATS_AVERAGE_MAP_KEY, value))
+            .writeTo(Sinks.map(temperatureStatsMap));
+
+        streamStage.rollingAggregate(AggregateOperations.minBy(Double::compareTo))
+            .map(value -> new AbstractMap.SimpleEntry<>(TEMP_STREAM_STATS_MIN_MAP_KEY, value))
+            .writeTo(Sinks.map(temperatureStatsMap));
+
+        streamStage.rollingAggregate(AggregateOperations.maxBy(Double::compareTo))
+            .map(value -> new AbstractMap.SimpleEntry<>(TEMP_STREAM_STATS_MAX_MAP_KEY, value))
+            .writeTo(Sinks.map(temperatureStatsMap));
 
         JobConfig jobConfig = getJobConfig(MQTT_INGESTION_JOB_NAME);
         Job mqttIngestionJob = hzClient.getJet().getJob(MQTT_INGESTION_JOB_NAME);
