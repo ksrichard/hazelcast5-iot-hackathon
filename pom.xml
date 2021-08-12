@@ -13,7 +13,8 @@
         <maven.compiler.target>11</maven.compiler.target>
         <hazelcast.version>5.0-BETA-1</hazelcast.version>
         <hivemq-server.version>2021.2</hivemq-server.version>
-        <hivemq-client.version>1.2.2</hivemq-client.version>
+        <commons-lang.verion>3.11</commons-lang.verion>
+        <jet-mqtt.verion>0.1</jet-mqtt.verion>
         <tensorflow-platform.version>0.3.1</tensorflow-platform.version>
     </properties>
 
@@ -34,9 +35,20 @@
             <version>${hivemq-server.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.hivemq</groupId>
-            <artifactId>hivemq-mqtt-client</artifactId>
-            <version>${hivemq-client.version}</version>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>${commons-lang.verion}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.hazelcast.jet.contrib</groupId>
+            <artifactId>mqtt</artifactId>
+            <version>${jet-mqtt.verion}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.hazelcast.jet</groupId>
+                    <artifactId>hazelcast-jet</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.tensorflow</groupId>

@@ -1,94 +1,120 @@
 package com.hazelcast.hackathon;
-import com.codahale.metrics.MetricRegistryListener;
+
+import java.io.File;
+
+import com.hivemq.embedded.EmbeddedHiveMQ;
+import org.apache.commons.lang3.math.NumberUtils;
+
 import com.hazelcast.client.HazelcastClient;
-import com.hazelcast.core.EntryEvent;
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.function.FunctionEx;
 import com.hazelcast.jet.Job;
-import com.hazelcast.jet.aggregate.AggregateOperations;
 import com.hazelcast.jet.config.JobConfig;
-import com.hazelcast.jet.impl.aggregate.AggregateOperation1Impl;
-import com.hazelcast.jet.pipeline.*;
+import com.hazelcast.jet.contrib.mqtt.MqttSources;
+import com.hazelcast.jet.contrib.mqtt.Subscription;
+import com.hazelcast.jet.pipeline.Pipeline;
+import com.hazelcast.jet.pipeline.Sinks;
+import com.hazelcast.jet.pipeline.Sources;
+import com.hazelcast.jet.pipeline.StreamSource;
 import com.hazelcast.jet.python.PythonServiceConfig;
 import com.hazelcast.jet.python.PythonTransforms;
 import com.hazelcast.map.IMap;
-import com.hazelcast.map.impl.MapListenerAdapter;
 import com.hazelcast.map.listener.EntryAddedListener;
-import com.hazelcast.map.listener.MapListener;
-import com.hivemq.client.mqtt.MqttGlobalPublishFilter;
-import com.hivemq.client.mqtt.datatypes.MqttQos;
-import com.hivemq.client.mqtt.mqtt5.Mqtt5BlockingClient;
-import com.hivemq.client.mqtt.mqtt5.Mqtt5Client;
-import com.hivemq.client.mqtt.mqtt5.message.Mqtt5Message;
-import com.hivemq.client.mqtt.mqtt5.message.publish.Mqtt5Publish;
-import com.hivemq.embedded.EmbeddedHiveMQ;
-import com.hivemq.embedded.EmbeddedHiveMQBuilder;
-import com.hivemq.metrics.MetricRegistryLogger;
-import org.tensorflow.SavedModelBundle;
-import org.tensorflow.Tensor;
-
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 public class Application {
 
-    public static void main(String[] args) throws InterruptedException {
+    public static final String TEMPERATURE_MAP_NAME = "temp";
+
+    public static final String MQTT_INGESTION_JOB_NAME = "mqtt-ingestion";
+
+    public static final String MODEL_TRAIN_JOB_NAME = "temp-model-train";
+
+    public static void main(String[] args) {
         // start Hz client
         HazelcastInstance hzClient = HazelcastClient.newHazelcastClient();
-        IMap<Long, Double> temperaturesMap = hzClient.getMap("temp");
+
+        IMap<Long, Double> temperaturesMap = hzClient.getMap(TEMPERATURE_MAP_NAME);
 
         // TODO: check if training should be put in a Jet pipeline
-        // model training pipeline
-        Pipeline trainingPipeline = Pipeline.create();
-        trainingPipeline.readFrom(Sources.map(temperaturesMap))
-                .sort((o1, o2) -> o1.getKey().compareTo(o2.getKey()))
-                .map(entry -> entry.getValue().toString())
-                .apply(PythonTransforms.mapUsingPythonBatch(
-                        new PythonServiceConfig()
-                                .setBaseDir("python/train")
-                                .setHandlerModule("train")
-                        )
-                )
-                .setLocalParallelism(1)
-                .writeTo(Sinks.logger());
-        JobConfig jobConfig = new JobConfig();
-        jobConfig.addClass(Application.class);
-        jobConfig.addClass(Mqtt5Publish.class);
-        jobConfig.addClass(Mqtt5Message.class);
-
-        // TODO: implement prediction pipeline
-
-
-        // map listener
-        //TODO: trigger model training at every 100 or 1000 element addition
-        temperaturesMap.addEntryListener((EntryAddedListener<Long, Double>) event -> {
-            hzClient.getJet().newJob(trainingPipeline, jobConfig).join();
-        }, true);
 
         // start MQTT
         EmbeddedHiveMQ hiveMQ = EmbeddedHiveMQ.builder().build();
         hiveMQ.start().join();
 
-        // TODO: check MQTT connector as source for pipelines instead of manually starting MQTT client and put data to it
-        // start mqtt client
-        Mqtt5BlockingClient client = Mqtt5Client.builder()
-                .serverHost("0.0.0.0")
-                .serverPort(1883)
-                .automaticReconnect()
-                .applyAutomaticReconnect()
-                .build().toBlocking();
-        client.connect();
+        // TODO: implement prediction pipeline
+        initTrainingPipeline(hzClient, temperaturesMap);
+        startMqttIngestionPipeline(hzClient, temperaturesMap);
+    }
 
-        Mqtt5BlockingClient.Mqtt5Publishes publishes = client.publishes(MqttGlobalPublishFilter.ALL);
-        client.subscribeWith().topicFilter("temp").qos(MqttQos.AT_LEAST_ONCE).send();
-        while(true) {
-            publishes.receive(0, TimeUnit.MICROSECONDS).ifPresent(mqtt5Publish -> {
-                String payload = new String(mqtt5Publish.getPayloadAsBytes());
-                System.out.println("Current temp: " + payload);
-                temperaturesMap.put(System.currentTimeMillis(), Double.parseDouble(payload));
-            });
+    private static void initTrainingPipeline(HazelcastInstance hzClient, IMap<Long, Double> temperatureMap) {
+        // model training pipeline
+        Pipeline trainingPipeline = Pipeline.create();
+        trainingPipeline.readFrom(Sources.map(temperatureMap))
+            .sort((o1, o2) -> o1.getKey().compareTo(o2.getKey()))
+            .map(entry -> entry.getValue().toString())
+            .apply(PythonTransforms.mapUsingPythonBatch(
+                new PythonServiceConfig()
+                    .setBaseDir("python/train")
+                    .setHandlerModule("train")
+                )
+            )
+            .setLocalParallelism(1)
+            .writeTo(Sinks.logger());
+        JobConfig trainingJobConfig = new JobConfig();
+        trainingJobConfig.addClass(Application.class);
+        trainingJobConfig.setName(MODEL_TRAIN_JOB_NAME);
+        trainingJobConfig.addClass(Application.class);
+        trainingJobConfig.addJar(new File("src/main/resources/mqtt-0.1.jar"));
+
+        Job modelTrainJob = hzClient.getJet().getJob(MODEL_TRAIN_JOB_NAME);
+        if (modelTrainJob != null) {
+            modelTrainJob.cancel();
         }
+
+        // map listener
+        //TODO: trigger model training at every 100 or 1000 element addition
+        temperatureMap.addEntryListener((EntryAddedListener<Long, Double>) event -> {
+            // TODO: with job name set it produces an exception after first run,
+            // TODO: and w/o a name we create a lot of jobs on Jet which should be cleaned up somehow
+            hzClient.getJet().newJob(trainingPipeline, trainingJobConfig).join();
+        }, true);
+    }
+
+    private static void startMqttIngestionPipeline(HazelcastInstance hzClient, IMap<Long, Double> temperatureMap) {
+        StreamSource<String> tempSource = MqttSources.builder()
+            .clientId("jet-consumer")
+            .broker("tcp://127.0.0.1:1883")
+//            .auth("username", "password".toCharArray())
+            .topic("temp")
+            .qualityOfService(Subscription.QualityOfService.AT_LEAST_ONCE)
+            .autoReconnect()
+            .keepSession()
+            .mapToItemFn((topic, message) -> new String(message.getPayload()))
+            .build();
+
+        // MQTT processing pipeline
+        Pipeline mqttIngestionPipeline = Pipeline.create();
+        mqttIngestionPipeline.readFrom(tempSource)
+            .withoutTimestamps()
+            .filter(NumberUtils::isCreatable)
+            .map(Double::parseDouble)
+            .peek()
+            .setLocalParallelism(1)
+            .writeTo(Sinks.mapWithUpdating(
+                temperatureMap,
+                aDouble -> System.currentTimeMillis(),
+                (oldValue, newValue) -> newValue));
+
+        JobConfig jobConfig = new JobConfig();
+
+        jobConfig.setName(MQTT_INGESTION_JOB_NAME);
+        jobConfig.addClass(Application.class);
+        jobConfig.addJar(new File("src/main/resources/mqtt-0.1.jar"));
+        Job mqttIngestionJob = hzClient.getJet().getJob(MQTT_INGESTION_JOB_NAME);
+        if (mqttIngestionJob != null) {
+            mqttIngestionJob.cancel();
+        }
+        mqttIngestionJob = hzClient.getJet().newJob(mqttIngestionPipeline, jobConfig);
+        mqttIngestionJob.join();
     }
 
 }
