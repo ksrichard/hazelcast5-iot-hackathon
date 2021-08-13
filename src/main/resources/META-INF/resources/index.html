@@ -142,7 +142,7 @@
                 $("#console").append(m.data + "\n");
                 var tempData = JSON.parse(m.data);
                 var date = new Date().getDate();
-                document.getElementById('temp_avg').innerText = tempData.streamTempAvg.toFixed(3) + " ºC";
+                document.getElementById('temp_avg').innerText = tempData.streamTempAvg.toFixed(2) + " ºC";
                 document.getElementById('temp_min').innerText = tempData.streamTempMin + " ºC";
                 document.getElementById('temp_max').innerText = tempData.streamTempMax + " ºC";
                 addData(tempChart, date, {x: date, y: tempData.streamTempCur})
