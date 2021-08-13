@@ -4,6 +4,7 @@ public class StatResponse {
 
     public StatResponse(Double streamTempCur, Double streamTempAvg, Double streamTempMin,
         Double streamTempMax) {
+
         this.streamTempCur = streamTempCur;
         this.streamTempAvg = streamTempAvg;
         this.streamTempMin = streamTempMin;
