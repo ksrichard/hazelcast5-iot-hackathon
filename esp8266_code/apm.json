@@ -1,0 +1,22 @@
+{
+    "board": {
+        "package": "esp8266",
+        "architecture": "esp8266",
+        "version": "latest",
+        "board_manager_url": "https://arduino.esp8266.com/stable/package_esp8266com_index.json"
+    },
+    "dependencies": [
+        {
+            "library": "OneWire",
+            "version": "latest"
+        },
+        {
+            "library": "DallasTemperature",
+            "version": "latest"
+        },
+        {
+            "library": "PubSubClient",
+            "version": "latest"
+        }
+    ]
+}

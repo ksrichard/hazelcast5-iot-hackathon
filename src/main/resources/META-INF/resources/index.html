@@ -25,7 +25,7 @@
 <nav class="navbar navbar-default navbar-pf" role="navigation">
     <div class="navbar-header">
         <a class="navbar-brand" href="/">
-            <p><strong><<< Meteorology station dashboard >>></strong></p>
+            <p><strong>Meteorology station dashboard</strong></p>
         </a>
     </div>
 </nav>
@@ -39,9 +39,9 @@
         <br/>
     </div>
     <div class="row">
-        <div class="col-md-4"><h2>AVG temp: <span id="temp_avg" class="badge bg-success">0.0</span></h2></div>
-        <div class="col-md-4"><h2>MIN temp: <span id="temp_min" class="badge bg-success">0.0</span></h2></div>
-        <div class="col-md-4"><h2>MAX temp: <span id="temp_max" class="badge bg-success">0.0</span></h2></div>
+        <div class="col-md-4"><h2>AVG temp: <span id="temp_avg" class="badge bg-success">0.0 ºC</span></h2></div>
+        <div class="col-md-4"><h2>MIN temp: <span id="temp_min" class="badge bg-success">0.0 ºC</span></h2></div>
+        <div class="col-md-4"><h2>MAX temp: <span id="temp_max" class="badge bg-success">0.0 ºC</span></h2></div>
 
     </div>
     <div class="row">
@@ -142,10 +142,9 @@
                 $("#console").append(m.data + "\n");
                 var tempData = JSON.parse(m.data);
                 var date = new Date().getDate();
-                document.getElementById('temp_avg').innerText = tempData.streamTempAvg;
-                document.getElementById('temp_min').innerText = tempData.streamTempMin;
-                document.getElementById('temp_max').innerText = tempData.streamTempMax;
-
+                document.getElementById('temp_avg').innerText = tempData.streamTempAvg.toFixed(3) + " ºC";
+                document.getElementById('temp_min').innerText = tempData.streamTempMin + " ºC";
+                document.getElementById('temp_max').innerText = tempData.streamTempMax + " ºC";
                 addData(tempChart, date, {x: date, y: tempData.streamTempCur})
                 var dataLength = tempChart.data.datasets[0].data.length;
                 if (dataLength > MAX_DATA_LENGTH) {
