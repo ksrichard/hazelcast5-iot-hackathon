@@ -14,8 +14,8 @@ Required JDK version is **11**!
 
    ``$ ./start-hz-cluster.sh``
 
-3. Package the application and run
+3. Run project
 
-    ``$ mvn clean package && java -jar target/iot-1.0-SNAPSHOT-jar-with-dependencies.jar``
+    ``$ mvn compile quarkus:dev``
 
 
