@@ -4,10 +4,11 @@ public class StatResponse {
 
     public StatResponse(Double streamTempCur, Double streamTempAvg, Double streamTempMin,
         Double streamTempMax) {
-        this.streamTempCur = streamTempCur;
-        this.streamTempAvg = streamTempAvg;
-        this.streamTempMin = streamTempMin;
-        this.streamTempMax = streamTempMax;
+
+        this.streamTempCur = decreasePrecision(streamTempCur);
+        this.streamTempAvg = decreasePrecision(streamTempAvg);
+        this.streamTempMin = decreasePrecision(streamTempMin);
+        this.streamTempMax = decreasePrecision(streamTempMax);
     }
 
     private Double streamTempCur;
@@ -32,6 +33,10 @@ public class StatResponse {
 
     public Double getStreamTempMax() {
         return streamTempMax;
+    }
+
+    private Double decreasePrecision(Double value) {
+        return Math.floor(value * 100) / 100;
     }
 
 }

@@ -57,6 +57,8 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.5.0/dist/chart.min.js"></script>
 
 <script type="text/javascript">
+
+    let MAX_DATA_LENGTH = 30;
     var connected = false;
     var socket;
     var tempChart;
@@ -113,7 +115,13 @@
         chart.data.datasets.forEach((dataset) => {
             dataset.data.push(data);
         });
-        chart.update();
+    }
+
+    function removeData(chart) {
+        chart.data.labels.pop();
+        chart.data.datasets.forEach((dataset) => {
+            dataset.data.shift();
+        });
     }
 
     var connect = function () {
@@ -137,7 +145,13 @@
                 document.getElementById('temp_avg').innerText = tempData.streamTempAvg;
                 document.getElementById('temp_min').innerText = tempData.streamTempMin;
                 document.getElementById('temp_max').innerText = tempData.streamTempMax;
+
                 addData(tempChart, date, {x: date, y: tempData.streamTempCur})
+                var dataLength = tempChart.data.datasets[0].data.length;
+                if (dataLength > MAX_DATA_LENGTH) {
+                    removeData(tempChart)
+                }
+                tempChart.update();
             };
         }
     };
