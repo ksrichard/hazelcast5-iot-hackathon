@@ -37,12 +37,6 @@ public class Application {
 
     public static final String TEMP_STREAM_STATS_MAX_MAP_KEY = "temp_stream_max";
 
-    public static final String TEMP_MAP_STATS_AVERAGE_MAP_KEY = "temp_map_avg";
-
-    public static final String TEMP_MAP_STATS_MIN_MAP_KEY = "temp_map_min";
-
-    public static final String TEMP_MAP_STATS_MAX_MAP_KEY = "temp_map_max";
-
     public static final String MQTT_INGESTION_JOB_NAME = "mqtt-ingestion";
 
     public static void main(String[] args) throws MalformedURLException {
@@ -61,15 +55,6 @@ public class Application {
             }
             if (event.getKey().equalsIgnoreCase(TEMP_STREAM_STATS_MAX_MAP_KEY)) {
                 System.out.println("MAX stream temperature: " + event.getValue());
-            }
-            if (event.getKey().equalsIgnoreCase(TEMP_MAP_STATS_AVERAGE_MAP_KEY)) {
-                System.out.println("AVG map temperature: " + event.getValue());
-            }
-            if (event.getKey().equalsIgnoreCase(TEMP_MAP_STATS_MIN_MAP_KEY)) {
-                System.out.println("MIN map temperature: " + event.getValue());
-            }
-            if (event.getKey().equalsIgnoreCase(TEMP_MAP_STATS_MAX_MAP_KEY)) {
-                System.out.println("MAX map temperature: " + event.getValue());
             }
         }, true);
 
