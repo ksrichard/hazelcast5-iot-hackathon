@@ -15,6 +15,8 @@ import com.hazelcast.map.IMap;
 import com.hazelcast.map.listener.EntryAddedListener;
 import com.hazelcast.map.listener.EntryUpdatedListener;
 import com.hivemq.embedded.EmbeddedHiveMQ;
+import io.quarkus.runtime.Quarkus;
+import io.quarkus.runtime.annotations.QuarkusMain;
 import org.apache.commons.lang3.math.NumberUtils;
 
 import java.io.File;
@@ -22,6 +24,7 @@ import java.net.MalformedURLException;
 import java.util.AbstractMap;
 import java.util.Map;
 
+@QuarkusMain
 public class Application {
 
     public static final String TEMPERATURE_MQTT_TOPIC_NAME = "temp";
@@ -85,8 +88,10 @@ public class Application {
         hiveMQ.start().join();
 
         // TODO: implement prediction/training pipelines
-        initMapStatsPipelines(hzClient, temperaturesMap, tempStatsMap);
+//        initMapStatsPipelines(hzClient, temperaturesMap, tempStatsMap);
         startMqttIngestionPipeline(hzClient, temperaturesMap, tempStatsMap);
+
+        Quarkus.run(args);
     }
 
     private static void initMapStatsPipelines(HazelcastInstance hzClient, IMap<Long, Double> temperatureMap, IMap<String, Double> tempStatsMap) {
@@ -162,13 +167,13 @@ public class Application {
             mqttIngestionJob.cancel();
         }
         mqttIngestionJob = hzClient.getJet().newJob(mqttIngestionPipeline, jobConfig);
-        mqttIngestionJob.join();
+//        mqttIngestionJob.join();
     }
     private static JobConfig getJobConfig(String jobName) {
         JobConfig jobConfig = new JobConfig();
         jobConfig.setName(jobName);
         jobConfig.addClass(Application.class);
-        jobConfig.addJar(new File("src/main/resources/mqtt-0.1.jar"));
+        jobConfig.addJar(new File("../src/main/resources/mqtt-0.1.jar"));
         return jobConfig;
     }
 

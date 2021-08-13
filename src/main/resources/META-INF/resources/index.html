@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Meteo Dashboard</title>
+    <link rel="stylesheet" type="text/css"
+          href="https://cdnjs.cloudflare.com/ajax/libs/patternfly/3.24.0/css/patternfly.min.css">
+    <link rel="stylesheet" type="text/css"
+          href="https://cdnjs.cloudflare.com/ajax/libs/patternfly/3.24.0/css/patternfly-additions.min.css">
+
+    <style>
+        #chart {
+            margin: 20px;
+            width: 600px;
+            height: 400px;
+        }
+        #temp_avg, #temp_min, #temp_max {
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+
+<body>
+<nav class="navbar navbar-default navbar-pf" role="navigation">
+    <div class="navbar-header">
+        <a class="navbar-brand" href="/">
+            <p><strong><<< Meteorology station dashboard >>></strong></p>
+        </a>
+    </div>
+</nav>
+<div class="container">
+    <br/>
+    <div class="row">
+        <input id="name" class="col-md-2" type="text" placeholder="Client name">
+        <div class="col-md-1"><button id="connect" class="btn btn-primary" type="button">Connect</button></div>
+        <div class="col-md-1"><button id="disconnect" class="btn btn-primary" type="button">Disconnect</button></div>
+        <br/>
+        <br/>
+    </div>
+    <div class="row">
+        <div class="col-md-4"><h2>AVG temp: <span id="temp_avg" class="badge bg-success">0.0</span></h2></div>
+        <div class="col-md-4"><h2>MIN temp: <span id="temp_min" class="badge bg-success">0.0</span></h2></div>
+        <div class="col-md-4"><h2>MAX temp: <span id="temp_max" class="badge bg-success">0.0</span></h2></div>
+
+    </div>
+    <div class="row">
+        <canvas id="chart"></canvas>
+    </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/js/bootstrap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/patternfly/3.24.0/js/patternfly.min.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.5.0/dist/chart.min.js"></script>
+
+<script type="text/javascript">
+    var connected = false;
+    var socket;
+    var tempChart;
+    var dataset = [];
+    // var dataset = [{x: 1628842179, y: 1}, {x:1638842189, y:2}, {x:1648842199, y:3}];
+
+    $(document).ready(function () {
+        $("#disconnect").attr("disabled", true);
+        $("#connect").click(connect);
+        $("#disconnect").click(disconnect);
+
+        $("#name").keypress(function (event) {
+            if (event.keyCode == 13 || event.which == 13) {
+                connect();
+            }
+        });
+
+        $("#name").focus();
+
+        var ctx = document.getElementById('chart').getContext('2d');
+
+        const labels = [];
+        const data = {
+            labels: labels,
+            datasets: [{
+                label: 'Temperature',
+                data: dataset,
+                fill: false,
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.4,
+            }]
+        };
+        const config = {
+            type: 'line',
+            data: data,
+            options: {
+                scales: {
+                    x: {
+                        ticks: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        };
+        tempChart = new Chart(
+            ctx,
+            config
+        );
+    });
+
+    function addData(chart, label, data) {
+        chart.data.labels.push(label);
+        chart.data.datasets.forEach((dataset) => {
+            dataset.data.push(data);
+        });
+        chart.update();
+    }
+
+    var connect = function () {
+        if (!connected) {
+            var name = $("#name").val();
+            console.log("Val: " + name);
+            socket = new WebSocket("ws://" + location.host + "/sensors/" + name);
+            socket.onopen = function () {
+                connected = true;
+                console.log("Connected to the web socket");
+                $("#disconnect").attr("disabled", false);
+                $("#connect").attr("disabled", true);
+                $("#name").attr("disabled", true);
+                $("#msg").focus();
+            };
+            socket.onmessage = function (m) {
+                console.log("Got message: " + m.data);
+                $("#console").append(m.data + "\n");
+                var tempData = JSON.parse(m.data);
+                var date = new Date().getDate();
+                document.getElementById('temp_avg').innerText = tempData.streamTempAvg;
+                document.getElementById('temp_min').innerText = tempData.streamTempMin;
+                document.getElementById('temp_max').innerText = tempData.streamTempMax;
+                addData(tempChart, date, {x: date, y: tempData.streamTempCur})
+            };
+        }
+    };
+
+    var disconnect = function () {
+        if (connected) {
+            socket.close();
+            $("#disconnect").attr("disabled", true);
+            $("#connect").attr("disabled", false);
+        }
+    };
+
+</script>
+</body>
+
+</html>
